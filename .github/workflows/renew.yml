@@ -3,7 +3,7 @@ name: auto renew
 on:
   workflow_dispatch:
   schedule:
-    - cron: "40 * * * *" 
+    - cron: "16 * * * *" 
 
 permissions:
   contents: write 
@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - name: 拉取仓库
+      - name: 拉取 REPO
         uses: actions/checkout@v4
 
       - name: 拉取私库代码
@@ -25,9 +25,6 @@ jobs:
           token: ${{ secrets.PRIVATE_REPO_TOKEN }} 
           path: private_script  
 
-      # =========================
-      # 🟡 1️⃣ 安装官方 WARP 客户端 (纯 SOCKS5 模式)
-      # =========================
       - name: Setup Official WARP Proxy
         run: |
           curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
@@ -56,12 +53,8 @@ jobs:
           pip install seleniumbase SpeechRecognition pydub
           sbase install chromium
 
-      # =========================
-      # 🟡 2️⃣ 运行脚本
-      # =========================
       - name: Run script
         env:
-          MC_USERNAME: ${{ secrets.MC_USERNAME }}
           TG_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
@@ -71,7 +64,7 @@ jobs:
           curl -s -x socks5://127.0.0.1:40000 https://api.ipify.org || echo "⚠️ IP获取失败"
           echo ""
 
-          # 运行 A 库中的 renew.py
+          # 运行私库中的 renew.py
           xvfb-run -a python private_script/renew.py
 
       - name: Upload screenshots
@@ -82,9 +75,6 @@ jobs:
           path: screenshots/**
           if-no-files-found: warn
 
-      # ----------------------------------------------------------------
-      # KeepAlive：写入时间戳并推送，防止 GitHub 禁用定时任务
-      # ----------------------------------------------------------------
       - name: KeepAlive
         if: always()
         run: |
