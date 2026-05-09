@@ -3,7 +3,7 @@ name: auto renew
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0,30 * * * *" 
+    - cron: "*/40 * * * *" 
 
 permissions:
   contents: write 
