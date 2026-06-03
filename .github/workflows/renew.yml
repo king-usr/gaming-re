@@ -1,74 +1,58 @@
-name: Game Run
-
+name: Auto Run
+ 
 on:
   schedule:
-    - cron: '* */1 * * *'
+    - cron: '6 21,9 * * *'
   workflow_dispatch:
 
 jobs:
-  renew:
+  run-addtime:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     steps:
       - name: 📥 下载私库脚本
         uses: actions/checkout@v4
         with:
-          repository: ${{ secrets.PRIVATE_REPO_NAME }} 
+          repository: ${{ secrets.PRIVATE_REPO_NAME }}
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           path: private
 
       - name: 📂 移动脚本到工作目录
-        run: mv private/game4free_renew.py game4free_renew.py
+        run: mv private/main.py main.py
 
-      - name: 🐍 设置 Python
-        uses: actions/setup-python@v4
+      - name: 设置 Python 环境
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: 🛡️ 启动 GOST 代理转发
-        if: ${{ env.GOST_PROXY != '' }}
+      - name: 安装 Python 依赖及系统组件
+        run: |
+          # 1. 升级基础构建工具，防止由于 GHA 镜像太旧导致编译失败
+          python -m pip install --upgrade pip setuptools wheel
+          
+          # 2. 显式安装 DrissionPage 及其所有可能漏掉的底层核心依赖
+          pip install DrissionPage requests DataRecorder DownloadKit FlowViewer lxml websocket-client psutil
+          
+          # 3. 安装虚拟显示器
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+
+      - name: 安装并配置 Cloudflare WARP CLI
+        run: |
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          sudo apt-get update
+          sudo apt-get install -y cloudflare-warp
+          
+          warp-cli --accept-tos registration new
+          warp-cli --accept-tos mode warp
+          warp-cli --accept-tos connect
+          
+          sleep 5
+          echo " WARP 初始化完成"
+
+      - name: 运行续期脚本
         env:
-          GOST_PROXY: ${{ secrets.GOST_PROXY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          VERSION=$(curl -s https://api.github.com/repos/ginuerzh/gost/releases/latest \
-            | grep '"tag_name"' | cut -d'"' -f4 | tr -d 'v')
-          echo "📦 GOST 版本: $VERSION"
-          wget -q "https://github.com/ginuerzh/gost/releases/download/v${VERSION}/gost_${VERSION}_linux_amd64.tar.gz"
-          tar -xzf "gost_${VERSION}_linux_amd64.tar.gz"
-          chmod +x gost
-          nohup ./gost -L http://:8080 -F "$GOST_PROXY" > gost.log 2>&1 &
-          sleep 3
-          echo "✅ GOST 已启动，测试连通性..."
-          curl -s -x http://127.0.0.1:8080 https://api.ipify.org \
-            | sed 's/\([0-9]*\.[0-9]*\.[0-9]*\.\)[0-9]*/\1**/g'
-
-      - name: 🛠️ 安装系统依赖
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y \
-            google-chrome-stable \
-            xvfb \
-            xdotool
-
-      - name: 🐍 安装 Python 依赖
-        run: pip install seleniumbase
-
-      - name: 🔧 安装 ChromeDriver
-        run: seleniumbase install chromedriver
-
-      - name: 🚀 运行续期脚本
-        env:
-          PYTHONIOENCODING: utf-8
-          TG_BOT: ${{ secrets.TG_BOT }}
-          GAME4FREE_ACCOUNT: ${{ secrets.GAME4FREE_ACCOUNT }}
-          GOST_PROXY: ${{ secrets.GOST_PROXY }}
-        run: |
-          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
-            python game4free_renew.py
-
-      - name: 📸 上传截图
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-screenshots
-          path: "*.png"
+          xvfb-run -a python main.py
